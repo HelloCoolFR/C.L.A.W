@@ -194,36 +194,44 @@ app.whenReady().then(() => {
   // Start active window polling
   let lastEmotion = ''
   let lastTitle = ''
+  let isPollingActiveWindow = false
+
   setInterval(async () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return
-    const title = await getActiveWindowTitle()
-    let emotion = ''
+    if (!mainWindow || mainWindow.isDestroyed() || isPollingActiveWindow) return
+    isPollingActiveWindow = true
+    try {
+      const title = await getActiveWindowTitle()
+      let emotion = ''
 
-    if (title) {
-      const lowerTitle = title.toLowerCase()
-      if (lowerTitle.includes('youtube')) {
-        // If sound is actively playing, set to listening
-        if (currentPeakVolume > 0.02) {
+      if (title) {
+        const lowerTitle = title.toLowerCase()
+        if (lowerTitle.includes('youtube')) {
+          if (currentPeakVolume > 0.02) {
+            emotion = 'listening'
+          } else {
+            emotion = 'curious'
+          }
+        } else if (lowerTitle.includes('chrome') || lowerTitle.includes('firefox') || lowerTitle.includes('edge') || lowerTitle.includes('brave') || lowerTitle.includes('opera') || lowerTitle.includes('safari') || lowerTitle.includes('browser')) {
+          emotion = 'searching'
+        } else if (lowerTitle.includes('spotify') || lowerTitle.includes('vlc') || lowerTitle.includes('music') || lowerTitle.includes('soundcloud')) {
           emotion = 'listening'
-        } else {
-          emotion = 'curious'
+        } else if (lowerTitle.includes('discord')) {
+          emotion = 'shy'
         }
-      } else if (lowerTitle.includes('chrome') || lowerTitle.includes('firefox') || lowerTitle.includes('edge') || lowerTitle.includes('brave') || lowerTitle.includes('opera') || lowerTitle.includes('safari') || lowerTitle.includes('browser')) {
-        emotion = 'searching'
-      } else if (lowerTitle.includes('spotify') || lowerTitle.includes('vlc') || lowerTitle.includes('music') || lowerTitle.includes('soundcloud')) {
-        emotion = 'listening'
-      } else if (lowerTitle.includes('discord')) {
-        emotion = 'shy'
       }
-    }
 
-    const currentEmotion = emotion || 'idle'
-    if (currentEmotion !== lastEmotion || title !== lastTitle) {
-      lastEmotion = currentEmotion
-      lastTitle = title
-      mainWindow.webContents.send('active-emotion', { emotion: currentEmotion, title })
+      const currentEmotion = emotion || 'idle'
+      if (currentEmotion !== lastEmotion || title !== lastTitle) {
+        lastEmotion = currentEmotion
+        lastTitle = title
+        mainWindow.webContents.send('active-emotion', { emotion: currentEmotion, title })
+      }
+    } catch (e) {
+      // Ignore polling errors
+    } finally {
+      isPollingActiveWindow = false
     }
-  }, 3000)
+  }, 5000)
 })
 
 let currentPeakVolume = 0

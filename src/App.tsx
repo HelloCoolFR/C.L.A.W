@@ -306,6 +306,8 @@ export default function App() {
         const dataArray = new Uint8Array(bufferLength)
 
         let currentVol = 0
+        let lastSentTime = 0
+        let lastSentVol = 0
         const decay = 0.58
         const bassHistory: number[] = []
 
@@ -347,7 +349,14 @@ export default function App() {
 
           const vol = Math.min(currentVol, 1.0)
           setAudioVolume(vol)
-          window.clawAPI?.sendVolume(vol)
+          
+          // Throttle IPC volume dispatch to max 10 times/sec to prevent IPC channel congestion
+          const now = performance.now()
+          if (now - lastSentTime > 100 || Math.abs(vol - lastSentVol) > 0.15) {
+            lastSentTime = now
+            lastSentVol = vol
+            window.clawAPI?.sendVolume(vol)
+          }
           requestAnimationFrame(update)
         }
         update()

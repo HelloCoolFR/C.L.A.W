@@ -30,7 +30,8 @@
     "publish": {
       "provider": "github",
       "owner": "HelloCoolFR",
-      "repo": "C.L.A.W"
+      "repo": "C.L.A.W",
+      "private": true
     },
     "directories": {
       "output": "dist-package"
