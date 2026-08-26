@@ -418,18 +418,17 @@ function getDiscordPings(): Promise<Array<{ sender: string, body: string }>> {
     })
   })
 }
-
 ipcMain.handle('get-discord-pings', async () => {
   return await getDiscordPings()
 })
 
-// â”€â”€ Embedded Context-Aware Comment Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Embedded Context-Aware Comment Engine ──────────────────────────────────────
 function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)] }
 
 const MUSIC_OPENERS = [
   'This beat is {vibe}!', 'Oh {artist}? Solid taste.',
   'That drop hits {adverb}.', 'You always find the {adj} tracks.',
-  '{artist} goes {adverb} in this one.', 'Good pick â€” {song} is {adj}.',
+  '{artist} goes {adverb} in this one.', 'Good pick — {song} is {adj}.',
   'The vibe on {song} is incredibly {adj}.', 'This one slaps {adverb}.',
   'Love the energy on {song}.', '{artist} delivering again.',
 ]
@@ -437,47 +436,98 @@ const VIBES = ['electric','raw','infectious','hypnotic','smooth','intense','cris
 const ADVERBS = ['hard','different','crazy','beautifully','perfectly','insanely well']
 const ADJS = ['rare','underrated','elite','certified','flawless','perfect','top-tier','immaculate']
 
-const GENRE_HINTS: Record<string, string[]> = {
-  'lofi':   ['So chill right now.', 'Perfect focus music.', 'Lo-fi mode activated.'],
-  'edm':    ['Drop incoming!', 'That bass line is crazy.', 'Going full energy mode.'],
-  'rap':    ['The bars on this one are real.', 'Flow is immaculate here.', 'Lyrics locked in.'],
-  'jazz':   ['Sophisticated choice.', 'Jazz brain activated.', 'Smooth as always.'],
-  'rock':   ['Rocking out I see.', 'That guitar riff is fire.', 'Classic energy.'],
-  'classic':['Old school taste.', 'Timeless pick.', 'Legendary vibes.'],
-  'pop':    ['Certified banger.', 'Catchy as always.', 'Can\'t get this out of my head.'],
-  'metal':  ['Going heavy today!', 'That riff is brutal (in the best way).', 'Full intensity mode.'],
-  'ambient':['Zoning out? Good call.', 'Ambient mode on.', 'Deep focus unlocked.'],
+interface AppCategory {
+  keywords: string[]
+  comments: string[]
 }
 
-const APP_COMMENTS: Record<string, string[]> = {
-  'code':     ['Debugging mode detected.', 'In the zone â€” nice.', 'Focus level: developer.', 'Coding session ongoing.'],
-  'visual':   ['Getting creative I see.', 'Art mode activated.', 'Design is looking sharp.'],
-  'game':     ['Gaming session spotted!', 'Let\'s go, get that W.', 'GG incoming.', 'No distractions now.'],
-  'browser':  ['Surfing the web?', 'Research mode engaged.', 'Down the rabbit hole again?'],
-  'discord':  ['Chatting away?', 'Socials open, I see.', 'Keeping up with the crew.'],
-  'video':    ['Watching something good?', 'Cinema mode activated.', 'Eyes glued to the screen.'],
-  'word':     ['Writing something great?', 'Document mode on.', 'The words will come.'],
-  'excel':    ['Spreadsheet hours.', 'Number crunching detected.', 'Data doesn\'t lie.'],
-  'terminal': ['Terminal open â€” power user detected.', 'Command line? Respect.', 'Shell game strong.'],
-  'spotify':  ['Spotify vibes only.', 'Good playlist choice.', 'Music taste confirmed.'],
-  'youtube':  ['YouTube rabbit hole incoming?', 'What are we watching?', 'Algorithm delivered again.'],
+const CATEGORIES: Record<string, AppCategory> = {
+  coding: {
+    keywords: ['code', 'visual studio', 'vscode', 'intellij', 'pycharm', 'webstorm', 'cursor', 'sublime', 'neovim', 'vim', 'github', 'gitlab', 'terminal', 'powershell', 'cmd', 'bash', 'zsh', 'git', 'compiler', 'antigravity'],
+    comments: [
+      'Locking in on the code! 💻',
+      'Focus level: developer ⚡',
+      'Squashing bugs or building features? 🐛',
+      'In the zone — clean code incoming.',
+      'Coding session detected. Let\'s build something great!',
+      'Terminal & editor active. Power user mode on 🔥'
+    ]
+  },
+  browsing: {
+    keywords: ['chrome', 'firefox', 'edge', 'brave', 'opera', 'safari', 'vivaldi', 'arc', 'google search', 'wikipedia', 'reddit', 'twitter', 'x.com', 'browser'],
+    comments: [
+      'Surfing the web? What rabbit hole are we down today? 🌐',
+      'Research mode engaged 🔍',
+      'Checking the latest news and updates! ✨',
+      'Finding the answers to life\'s questions? 🧠',
+      'Tabs on tabs — stay curious!'
+    ]
+  },
+  gaming: {
+    keywords: ['steam', 'epic games', 'game', 'minecraft', 'valorant', 'league', 'fortnite', 'roblox', 'overwatch', 'apex', 'counter-strike', 'cs2', 'gta', 'rpg', 'genshin', 'honkai', 'zelda', 'elden ring'],
+    comments: [
+      'Gaming session spotted! Get that W 🎮',
+      'Locked in! No distractions, let\'s win this 🏆',
+      'Game on! Focus mode activated 🔥',
+      'GGs incoming! Have fun out there ✨'
+    ]
+  },
+  creative: {
+    keywords: ['figma', 'photoshop', 'illustrator', 'blender', 'premiere', 'after effects', 'canva', 'davinci', 'gimp', 'cinema 4d', 'unity', 'unreal'],
+    comments: [
+      'Creative brain activated! Making something beautiful 🎨',
+      'Design & art mode on — looking sharp! ✨',
+      'Pixel perfection in progress 🖌️',
+      'Crafting visual magic right now 🪄'
+    ]
+  },
+  media: {
+    keywords: ['youtube', 'netflix', 'twitch', 'disney', 'hulu', 'anime', 'crunchyroll', 'prime video', 'vlc', 'mpv', 'movie', 'series'],
+    comments: [
+      'Watching something good? Popcorn time! 🍿',
+      'Entertainment mode activated 🎬',
+      'Chill session — enjoy the stream/video! ✨',
+      'Catching up on some content 📺'
+    ]
+  },
+  communication: {
+    keywords: ['discord', 'slack', 'telegram', 'whatsapp', 'teams', 'messenger', 'signal', 'zoom', 'skype'],
+    comments: [
+      'Chatting with the squad? 💬',
+      'Keeping up with the team & friends ✨',
+      'Social mode on — say hi for me! 👋',
+      'Messages coming in fast 📬'
+    ]
+  },
+  productivity: {
+    keywords: ['notion', 'obsidian', 'word', 'excel', 'powerpoint', 'docs', 'sheets', 'trello', 'jira', 'asana', 'onenote', 'todoist', 'calculator', 'notes'],
+    comments: [
+      'Organizing life & getting things done 📋',
+      'Productivity mode: 100% 💼',
+      'Structuring ideas like a pro ✨',
+      'Focus session ongoing — you got this! 💪'
+    ]
+  },
+  music: {
+    keywords: ['spotify', 'soundcloud', 'apple music', 'tidal', 'deezer', 'music', 'bandcamp'],
+    comments: [
+      'Music vibes only 🎵',
+      'Soundtrack to the grind! 🎧',
+      'Vibing to the playlist ✨',
+      'Good beats keep the momentum going 🎶'
+    ]
+  }
 }
 
 function generateSmartComment(prompt: string): string {
   const p = prompt.toLowerCase()
 
   // Music comment branch
-  if (p.includes('song:') || p.includes('artist:') || p.includes('music')) {
+  if (p.includes('song:') || p.includes('artist:') || p.includes('music comment')) {
     const songMatch = prompt.match(/song:\s*"?([^"]+)"?/i)
     const artistMatch = prompt.match(/artist:\s*"?([^"]+)"?/i)
     const song = songMatch?.[1]?.trim() || 'this track'
     const artist = artistMatch?.[1]?.trim() || 'them'
-
-    // Check genre keywords
-    const combined = (song + ' ' + artist).toLowerCase()
-    for (const [kw, lines] of Object.entries(GENRE_HINTS)) {
-      if (combined.includes(kw)) return pick(lines)
-    }
 
     // Template fill
     const template = pick(MUSIC_OPENERS)
@@ -494,23 +544,41 @@ function generateSmartComment(prompt: string): string {
     try {
       const mentionsRaw = prompt.match(/Mentions:\s*(.+)/s)?.[1] || '[]'
       const pings: Array<{ sender: string; body: string }> = JSON.parse(mentionsRaw)
-      if (pings.length === 0) return "You're all caught up on Discord! âœ¨"
+      if (pings.length === 0) return "You're all caught up on Discord! ✨"
       const senders = [...new Set(pings.map(p => p.sender))]
       if (senders.length === 1) {
         const msgs = pings.map(p => p.body).filter(Boolean)
-        return `${senders[0]} pinged you ${pings.length} time${pings.length > 1 ? 's' : ''}. Last: "${msgs[msgs.length - 1]?.substring(0, 50) || 'â€¦'}"`
+        return `${senders[0]} pinged you ${pings.length} time${pings.length > 1 ? 's' : ''}. Last: "${msgs[msgs.length - 1]?.substring(0, 50) || '…'}"`
       }
-      return `${senders.slice(0, 3).join(', ')} pinged you â€” ${pings.length} total mention${pings.length > 1 ? 's' : ''} waiting.`
+      return `${senders.slice(0, 3).join(', ')} pinged you — ${pings.length} total mention${pings.length > 1 ? 's' : ''} waiting.`
     } catch { return 'Some Discord pings are waiting for you.' }
   }
 
-  // App reaction branch
-  for (const [kw, lines] of Object.entries(APP_COMMENTS)) {
-    if (p.includes(kw)) return pick(lines)
+  // App reaction branch: Match against rich categories
+  for (const category of Object.values(CATEGORIES)) {
+    for (const keyword of category.keywords) {
+      if (p.includes(keyword)) {
+        return pick(category.comments)
+      }
+    }
   }
 
-  // Generic fallback pool - return empty string if no smart rule matches
-  return ''
+  // Contextual fallback for recognized window titles
+  if (p.includes('title:')) {
+    const title = prompt.split(/title:\s*/i)[1]?.trim() || ''
+    if (title.length > 3) {
+      const shortTitle = title.split(/[-|–—]/)[0].trim()
+      const fallbackTemplates = [
+        `Locked in on ${shortTitle} ✨`,
+        `Focus mode: ${shortTitle} 🚀`,
+        `Making progress on ${shortTitle} 💪`,
+        `Working smoothly with ${shortTitle} ⚡`
+      ]
+      return pick(fallbackTemplates)
+    }
+  }
+
+  return 'Keeping you company! ✨'
 }
 
 ipcMain.handle('fetch-ai-completion', async (event, { prompt }) => {
