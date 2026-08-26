@@ -19,5 +19,8 @@ contextBridge.exposeInMainWorld('clawAPI', {
   fetchAICompletion: (config: any) => ipcRenderer.invoke('fetch-ai-completion', config),
   setWindowSize: (width: number, height: number) => ipcRenderer.invoke('set-window-size', { width, height }),
   minimizeToTray: () => ipcRenderer.send('minimize-to-tray'),
-  saveUpdateToken: (token: string) => ipcRenderer.invoke('save-update-token', token)
+  saveUpdateToken: (token: string) => ipcRenderer.invoke('save-update-token', token),
+  onUpdateStatus: (callback: (status: string) => void) => {
+    ipcRenderer.on('update-status', (event, status) => callback(status))
+  }
 })

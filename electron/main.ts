@@ -266,25 +266,43 @@ ipcMain.handle('optimize-pc', async () => {
   })
 })
 
-// Dynamic update system: Checks a local directory "update" for updated files
+// Update check system: Queries GitHub Releases using electron-updater
 ipcMain.handle('check-updates', async () => {
-  const updateDir = path.join(app.getAppPath(), 'update')
-  const distDir = path.join(app.getAppPath(), 'dist')
-  if (fs.existsSync(updateDir)) {
-    try {
-      const files = fs.readdirSync(updateDir)
-      if (files.length > 0) {
-        // Copy files from update to dist
-        for (const file of files) {
-          fs.copyFileSync(path.join(updateDir, file), path.join(distDir, file))
-        }
-        return { updated: true }
-      }
-    } catch (e: any) {
-      return { updated: false, error: e.message }
-    }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    const isNew = result && result.updateInfo.version !== app.getVersion()
+    return { updated: isNew }
+  } catch (e: any) {
+    return { updated: false, error: e.message }
   }
-  return { updated: false }
+})
+
+// autoUpdater status event forwarding
+autoUpdater.on('update-available', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', 'Update available. Downloading...')
+  }
+})
+
+autoUpdater.on('update-not-available', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', 'App is up to date')
+  }
+})
+
+autoUpdater.on('update-downloaded', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', 'Update downloaded. Restarting...')
+  }
+  setTimeout(() => {
+    autoUpdater.quitAndInstall()
+  }, 3000)
+})
+
+autoUpdater.on('error', (err) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-status', `Update error: ${err.message}`)
+  }
 })
 
 function getDiscordPings(): Promise<Array<{ sender: string, body: string }>> {

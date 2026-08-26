@@ -210,6 +210,22 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (window.clawAPI?.onUpdateStatus) {
+      window.clawAPI.onUpdateStatus((status) => {
+        setSysStatus(status)
+        addLog(`[Update] Status: ${status}`)
+        if (status.includes('error')) {
+          setCurrentAnim('confused')
+        } else if (status.includes('downloaded') || status.includes('up to date')) {
+          setCurrentAnim('happy')
+        } else {
+          setCurrentAnim('working')
+        }
+      })
+    }
+  }, [])
+
+  useEffect(() => {
     if (!detectedApp || detectedApp.toLowerCase().includes('c.l.a.w')) {
       setLiveComment(null)
       return
@@ -891,7 +907,7 @@ export default function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <button className="action-btn" onClick={runOptimize}>Optimize Computer</button>
             <button className="action-btn secondary" onClick={openTaskManager}>Open Task Manager</button>
-            <button className="action-btn secondary" onClick={checkUpdates}>Check Dynamic Updates</button>
+            <button className="action-btn secondary" onClick={checkUpdates}>Check for Updates</button>
           </div>
 
           <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '11px', color: 'var(--text-primary)', marginTop: '8px', cursor: 'pointer' }}>
