@@ -312,8 +312,8 @@ function getDiscordPings(): Promise<Array<{ sender: string, body: string }>> {
       $notifications = $task.Result
       foreach ($n in $notifications) {
         $app = $n.AppInfo.DisplayInfo.DisplayName
-        if ($app -eq "Discord") {
-          $binding = $n.Notification.Visual.GetBinding([Windows.UI.Notifications.NotificationTemplateNames]::ToastGeneric)
+        if ($app -like "*Discord*") {
+          $binding = $n.Notification.Visual.GetBinding("ToastGeneric")
           if ($binding) {
             $texts = $binding.GetTextElements()
             $title = ""
