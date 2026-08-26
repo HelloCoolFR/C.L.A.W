@@ -50,7 +50,12 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "icon.png",
       "uninstallerIcon": "icon.png",
-      "uninstallDisplayName": "C.L.A.W Companion"
+      "uninstallDisplayName": "C.L.A.W Companion",
+      "installerHeaderIcon": "icon.png",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "C.L.A.W Companion",
+      "runAfterFinish": true
     },
     "extraResources": [
       "icon.png"
