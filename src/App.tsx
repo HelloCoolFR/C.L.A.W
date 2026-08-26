@@ -93,6 +93,7 @@ export default function App() {
   const [avatarPlaying, setAvatarPlaying] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<'agenda' | 'system' | 'notes' | 'calc' | 'clip' | 'pings' | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
   const [isJiggling, setIsJiggling] = useState(false)
   const [loadingPings, setLoadingPings] = useState(false)
   const [pingSummary, setPingSummary] = useState('')
@@ -967,7 +968,7 @@ export default function App() {
                   lineHeight: '1.45',
                   whiteSpace: 'pre-wrap',
                   color: 'var(--text-primary)',
-                  maxHeight: '180px',
+                  maxHeight: '130px',
                   overflowY: 'auto',
                   textAlign: 'left'
                 }}
@@ -977,6 +978,28 @@ export default function App() {
               <button className="action-btn" onClick={fetchDiscordPings}>
                 Refresh Summary
               </button>
+
+              <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: '6px', marginTop: '2px' }}>
+                <button
+                  className="action-btn secondary"
+                  style={{ fontSize: '10px', padding: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', cursor: 'pointer' }}
+                  onClick={() => setShowGuide(!showGuide)}
+                >
+                  <span>{showGuide ? 'Hide' : 'Show'} Notification Guide</span>
+                  <span>{showGuide ? '▲' : '▼'}</span>
+                </button>
+                {showGuide && (
+                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(0,0,0,0.2)', padding: '6px', borderRadius: '4px', textAlign: 'left', maxHeight: '100px', overflowY: 'auto' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--accent)' }}>1. Windows Settings:</div>
+                    <div>• Go to <strong style={{ color: 'white' }}>Settings &gt; System &gt; Notifications</strong>.</div>
+                    <div>• Turn ON <strong style={{ color: 'white' }}>Notifications</strong> globally.</div>
+                    <div>• Find Discord under sender list and check <strong style={{ color: 'white' }}>Banners (Toasts)</strong> and <strong style={{ color: 'white' }}>Notification Center</strong>.</div>
+                    <div style={{ fontWeight: 600, color: 'var(--accent)', marginTop: '4px' }}>2. Discord Settings:</div>
+                    <div>• Open Discord, go to <strong style={{ color: 'white' }}>User Settings &gt; Notifications</strong>.</div>
+                    <div>• Enable <strong style={{ color: 'white' }}>Desktop Notifications</strong>.</div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
