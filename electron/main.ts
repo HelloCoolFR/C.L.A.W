@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, clipboard, screen, desktopCapturer, Tray, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, clipboard, screen, desktopCapturer, Tray, Menu, nativeImage } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -32,11 +32,24 @@ function getIconPath() {
   
   if (fs.existsSync(primaryPath)) return primaryPath
   
-  // Fallback to icon.png if .ico is missing
   const fallback = app.isPackaged
     ? path.join(process.resourcesPath, 'icon.png')
     : path.join(app.getAppPath(), 'icon.png')
   return fallback
+}
+
+function getTrayIcon(): Electron.NativeImage {
+  const trayFile = 'tray-icon.png'
+  const primaryPath = app.isPackaged
+    ? path.join(process.resourcesPath, trayFile)
+    : path.join(app.getAppPath(), trayFile)
+  
+  const targetPath = fs.existsSync(primaryPath) ? primaryPath : getIconPath()
+  let image = nativeImage.createFromPath(targetPath)
+  if (image.isEmpty()) {
+    console.warn('[Tray] NativeImage is empty from:', targetPath)
+  }
+  return image.resize({ width: 24, height: 24 })
 }
 
 function createWindow() {
@@ -73,10 +86,13 @@ function createWindow() {
 
 // Tray initialization
 function createTray() {
-  const iconPath = getIconPath()
-  if (!fs.existsSync(iconPath)) return
-
-  tray = new Tray(iconPath)
+  try {
+    const icon = getTrayIcon()
+    tray = new Tray(icon)
+  } catch (err) {
+    console.error('[Tray] Failed to create tray:', err)
+    return
+  }
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Show C.L.A.W',

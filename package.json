@@ -40,7 +40,8 @@
       "dist-electron/**/*",
       "package.json",
       "icon.png",
-      "icon.ico"
+      "icon.ico",
+      "tray-icon.png"
     ],
     "win": {
       "target": "nsis",
@@ -60,7 +61,8 @@
     },
     "extraResources": [
       "icon.png",
-      "icon.ico"
+      "icon.ico",
+      "tray-icon.png"
     ]
   }
 }
