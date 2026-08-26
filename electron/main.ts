@@ -144,37 +144,74 @@ ipcMain.handle('set-window-size', (_event, { width, height }: { width: number; h
 })
 
 
-function getActiveWindowTitle(): Promise<string> {
-  return new Promise((resolve) => {
-    if (process.platform === 'win32') {
-      const script = `
-        $def = '[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);'
-        $type = Add-Type -MemberDefinition $def -Name WinApi -Namespace WinApi -PassThru
+let activeWindowProcess: any = null
+
+function startActiveWindowWatcher() {
+  if (process.platform !== 'win32') return
+
+  try {
+    const script = `
+      $def = '[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);'
+      $type = Add-Type -MemberDefinition $def -Name WinApi -Namespace WinApi -PassThru
+      $title = New-Object System.Text.StringBuilder 256
+      while ($true) {
         $hwnd = $type::GetForegroundWindow()
-        $title = New-Object System.Text.StringBuilder 256
+        $title.Clear() | Out-Null
         $type::GetWindowText($hwnd, $title, 256) | Out-Null
-        $title.ToString()
-      `.trim()
-      const base64 = Buffer.from(script, 'utf16le').toString('base64')
-      exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${base64}`, (err, stdout) => {
-        if (err) resolve('')
-        else resolve(stdout.trim())
-      })
-    } else if (process.platform === 'linux') {
-      exec('xdotool getwindowfocus getwindowname', (err, stdout) => {
-        if (err) resolve('')
-        else resolve(stdout.trim())
-      })
-    } else {
-      resolve('')
-    }
-  })
+        Write-Output "TITLE:$($title.ToString())"
+        [System.Threading.Thread]::Sleep(3000)
+      }
+    `.trim()
+
+    const base64 = Buffer.from(script, 'utf16le').toString('base64')
+    activeWindowProcess = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', base64])
+
+    let lastEmotion = ''
+    let lastTitle = ''
+
+    activeWindowProcess.stdout.on('data', (data: Buffer) => {
+      const lines = data.toString().split(/\r?\n/)
+      for (const line of lines) {
+        if (line.startsWith('TITLE:')) {
+          const title = line.substring(6).trim()
+          let emotion = ''
+          if (title) {
+            const lowerTitle = title.toLowerCase()
+            if (lowerTitle.includes('youtube')) {
+              emotion = currentPeakVolume > 0.02 ? 'listening' : 'curious'
+            } else if (lowerTitle.includes('chrome') || lowerTitle.includes('firefox') || lowerTitle.includes('edge') || lowerTitle.includes('brave') || lowerTitle.includes('opera') || lowerTitle.includes('safari') || lowerTitle.includes('browser')) {
+              emotion = 'searching'
+            } else if (lowerTitle.includes('spotify') || lowerTitle.includes('vlc') || lowerTitle.includes('music') || lowerTitle.includes('soundcloud')) {
+              emotion = 'listening'
+            } else if (lowerTitle.includes('discord')) {
+              emotion = 'shy'
+            }
+          }
+          const currentEmotion = emotion || 'idle'
+          if (currentEmotion !== lastEmotion || title !== lastTitle) {
+            lastEmotion = currentEmotion
+            lastTitle = title
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('active-emotion', { emotion: currentEmotion, title })
+            }
+          }
+        }
+      }
+    })
+
+    activeWindowProcess.on('exit', () => {
+      activeWindowProcess = null
+    })
+  } catch (err) {
+    console.error('Failed to start active window watcher:', err)
+  }
 }
 
 app.whenReady().then(() => {
   setupPrivateUpdater()
   createWindow()
   createTray()
+  startActiveWindowWatcher()
 
   // Configure autoUpdater logger
   autoUpdater.logger = console
@@ -190,48 +227,6 @@ app.whenReady().then(() => {
       createTray()
     }
   })
-
-  // Start active window polling
-  let lastEmotion = ''
-  let lastTitle = ''
-  let isPollingActiveWindow = false
-
-  setInterval(async () => {
-    if (!mainWindow || mainWindow.isDestroyed() || isPollingActiveWindow) return
-    isPollingActiveWindow = true
-    try {
-      const title = await getActiveWindowTitle()
-      let emotion = ''
-
-      if (title) {
-        const lowerTitle = title.toLowerCase()
-        if (lowerTitle.includes('youtube')) {
-          if (currentPeakVolume > 0.02) {
-            emotion = 'listening'
-          } else {
-            emotion = 'curious'
-          }
-        } else if (lowerTitle.includes('chrome') || lowerTitle.includes('firefox') || lowerTitle.includes('edge') || lowerTitle.includes('brave') || lowerTitle.includes('opera') || lowerTitle.includes('safari') || lowerTitle.includes('browser')) {
-          emotion = 'searching'
-        } else if (lowerTitle.includes('spotify') || lowerTitle.includes('vlc') || lowerTitle.includes('music') || lowerTitle.includes('soundcloud')) {
-          emotion = 'listening'
-        } else if (lowerTitle.includes('discord')) {
-          emotion = 'shy'
-        }
-      }
-
-      const currentEmotion = emotion || 'idle'
-      if (currentEmotion !== lastEmotion || title !== lastTitle) {
-        lastEmotion = currentEmotion
-        lastTitle = title
-        mainWindow.webContents.send('active-emotion', { emotion: currentEmotion, title })
-      }
-    } catch (e) {
-      // Ignore polling errors
-    } finally {
-      isPollingActiveWindow = false
-    }
-  }, 5000)
 })
 
 let currentPeakVolume = 0
@@ -243,6 +238,13 @@ ipcMain.on('send-volume', (event, volume) => {
 ipcMain.handle('get-desktop-source-id', async () => {
   const sources = await desktopCapturer.getSources({ types: ['screen'] })
   return sources[0]?.id || ''
+})
+
+app.on('before-quit', () => {
+  if (activeWindowProcess) {
+    try { activeWindowProcess.kill() } catch {}
+    activeWindowProcess = null
+  }
 })
 
 app.on('window-all-closed', () => {

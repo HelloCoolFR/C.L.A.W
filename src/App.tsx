@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Unknown, { type AnimationName } from '../claw-avatar/Unknown'
 
 // Extend global window object with preload APIs
@@ -99,6 +99,8 @@ export default function App() {
   const [isJiggling, setIsJiggling] = useState(false)
   const [loadingPings, setLoadingPings] = useState(false)
   const [pingSummary, setPingSummary] = useState('')
+  const [devAudioVolume, setDevAudioVolume] = useState(0)
+  const avatarWrapperRef = useRef<HTMLDivElement>(null)
 
   // Multi-File Notes state
   const [notesList, setNotesList] = useState<NoteFile[]>(() => {
@@ -138,7 +140,6 @@ export default function App() {
   }, [devMode])
   
   const [detectedApp, setDetectedApp] = useState('')
-  const [audioVolume, setAudioVolume] = useState(0)
   const [liveComment, setLiveComment] = useState<string | null>(null)
   // AI is handled entirely offline via local model in electron/main.ts
   
@@ -348,14 +349,19 @@ export default function App() {
           }
 
           const vol = Math.min(currentVol, 1.0)
-          setAudioVolume(vol)
+          if (avatarWrapperRef.current) {
+            avatarWrapperRef.current.style.transform = `scale(${1 + vol * 0.4}) translateY(-${vol * 36}px)`
+          }
           
           // Throttle IPC volume dispatch to max 10 times/sec to prevent IPC channel congestion
           const now = performance.now()
-          if (now - lastSentTime > 100 || Math.abs(vol - lastSentVol) > 0.15) {
+          if (now - lastSentTime > 120 || Math.abs(vol - lastSentVol) > 0.15) {
             lastSentTime = now
             lastSentVol = vol
             window.clawAPI?.sendVolume(vol)
+            if (devMode) {
+              setDevAudioVolume(vol)
+            }
           }
           requestAnimationFrame(update)
         }
@@ -769,13 +775,11 @@ export default function App() {
 
       {/* Avatar Container */}
       <div
+        ref={avatarWrapperRef}
         className={`avatar-wrapper ${isJiggling ? 'jiggle' : ''}`}
         onMouseDown={handleMouseDown}
         onClick={handleAvatarClick}
         onContextMenu={handleContextMenu}
-        style={{
-          transform: `scale(${1 + audioVolume * 0.4}) translateY(-${audioVolume * 36}px)`
-        }}
       >
         <Unknown animation={currentAnim} playing={avatarPlaying} size={110} />
       </div>
@@ -929,7 +933,7 @@ export default function App() {
             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', padding: '8px', marginTop: '8px', fontSize: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--accent)', fontWeight: 600 }}>Detected App:</span> {detectedApp || 'None'}</div>
               <div><span style={{ color: 'var(--accent)', fontWeight: 600 }}>Animation:</span> {currentAnim}</div>
-              <div><span style={{ color: 'var(--accent)', fontWeight: 600 }}>Audio peak:</span> {(audioVolume * 100).toFixed(0)}%</div>
+              <div><span style={{ color: 'var(--accent)', fontWeight: 600 }}>Audio peak:</span> {(devAudioVolume * 100).toFixed(0)}%</div>
             </div>
           )}
         </div>
@@ -1060,7 +1064,7 @@ export default function App() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '10px', color: 'var(--text-secondary)', padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginBottom: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
             <div><span style={{ color: '#00ff66', fontWeight: 700 }}>App: </span>{detectedApp ? (detectedApp.length > 22 ? detectedApp.substring(0, 19) + '…' : detectedApp) : '—'}</div>
             <div><span style={{ color: '#00ff66', fontWeight: 700 }}>Anim: </span>{currentAnim}</div>
-            <div><span style={{ color: '#00ff66', fontWeight: 700 }}>Audio: </span>{(audioVolume * 100).toFixed(0)}%</div>
+            <div><span style={{ color: '#00ff66', fontWeight: 700 }}>Audio: </span>{(devAudioVolume * 100).toFixed(0)}%</div>
             <div><span style={{ color: '#00ff66', fontWeight: 700 }}>AI: </span>Local · Offline</div>
           </div>
 
