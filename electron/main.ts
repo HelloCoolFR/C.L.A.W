@@ -23,8 +23,14 @@ function setupPrivateUpdater() {
   }
 }
 
+function getIconPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(app.getAppPath(), 'icon.png')
+}
+
 function createWindow() {
-  const iconPath = path.join(app.getAppPath(), 'icon.png')
+  const iconPath = getIconPath()
 
   mainWindow = new BrowserWindow({
     width: 320,
@@ -57,7 +63,7 @@ function createWindow() {
 
 // Tray initialization
 function createTray() {
-  const iconPath = path.join(app.getAppPath(), 'icon.png')
+  const iconPath = getIconPath()
   if (!fs.existsSync(iconPath)) return
 
   tray = new Tray(iconPath)
