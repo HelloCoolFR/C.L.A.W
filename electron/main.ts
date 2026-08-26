@@ -24,9 +24,19 @@ function setupPrivateUpdater() {
 }
 
 function getIconPath() {
-  return app.isPackaged
+  const isWin = process.platform === 'win32'
+  const iconFile = isWin ? 'icon.ico' : 'icon.png'
+  const primaryPath = app.isPackaged
+    ? path.join(process.resourcesPath, iconFile)
+    : path.join(app.getAppPath(), iconFile)
+  
+  if (fs.existsSync(primaryPath)) return primaryPath
+  
+  // Fallback to icon.png if .ico is missing
+  const fallback = app.isPackaged
     ? path.join(process.resourcesPath, 'icon.png')
     : path.join(app.getAppPath(), 'icon.png')
+  return fallback
 }
 
 function createWindow() {
@@ -150,8 +160,13 @@ app.whenReady().then(() => {
   createWindow()
   createTray()
 
-  // Check for updates and notify the user
-  autoUpdater.checkForUpdatesAndNotify()
+  // Configure autoUpdater logger
+  autoUpdater.logger = console
+
+  // Check for updates and notify the user on startup
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.error('autoUpdater startup error:', err)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -275,10 +290,17 @@ ipcMain.handle('optimize-pc', async () => {
 // Update check system: Queries GitHub Releases using electron-updater
 ipcMain.handle('check-updates', async () => {
   try {
+    setupPrivateUpdater()
+    if (mainWindow) {
+      mainWindow.webContents.send('update-status', 'Checking GitHub for updates...')
+    }
     const result = await autoUpdater.checkForUpdates()
     const isNew = result && result.updateInfo.version !== app.getVersion()
-    return { updated: isNew }
+    return { updated: isNew, version: result?.updateInfo?.version }
   } catch (e: any) {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-status', `Update check failed: ${e.message}`)
+    }
     return { updated: false, error: e.message }
   }
 })

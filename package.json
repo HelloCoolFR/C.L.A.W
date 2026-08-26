@@ -39,26 +39,28 @@
       "dist/**/*",
       "dist-electron/**/*",
       "package.json",
-      "icon.png"
+      "icon.png",
+      "icon.ico"
     ],
     "win": {
       "target": "nsis",
-      "icon": "icon.png"
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "icon.png",
-      "uninstallerIcon": "icon.png",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
       "uninstallDisplayName": "C.L.A.W Companion",
-      "installerHeaderIcon": "icon.png",
+      "installerHeaderIcon": "icon.ico",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "C.L.A.W Companion",
       "runAfterFinish": true
     },
     "extraResources": [
-      "icon.png"
+      "icon.png",
+      "icon.ico"
     ]
   }
 }
