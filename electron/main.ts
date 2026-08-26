@@ -24,7 +24,7 @@ function setupPrivateUpdater() {
 }
 
 function createWindow() {
-  const iconPath = path.join(__dirname, '../icon.png')
+  const iconPath = path.join(app.getAppPath(), 'icon.png')
 
   mainWindow = new BrowserWindow({
     width: 320,
@@ -57,7 +57,7 @@ function createWindow() {
 
 // Tray initialization
 function createTray() {
-  const iconPath = path.join(__dirname, '../icon.png')
+  const iconPath = path.join(app.getAppPath(), 'icon.png')
   if (!fs.existsSync(iconPath)) return
 
   tray = new Tray(iconPath)

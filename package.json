@@ -38,7 +38,8 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "package.json"
+      "package.json",
+      "icon.png"
     ],
     "win": {
       "target": "nsis",
