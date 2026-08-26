@@ -19,6 +19,8 @@ declare global {
       fetchAICompletion: (config: { prompt: string }) => Promise<string>
       setWindowSize: (width: number, height: number) => Promise<void>
       minimizeToTray: () => void
+      saveUpdateToken: (token: string) => Promise<{ success: boolean }>
+      onUpdateStatus: (callback: (status: string) => void) => void
     }
   }
 }
