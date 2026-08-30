@@ -1,7 +1,7 @@
 {
   "name": "claw-companion",
   "productName": "C.L.A.W Companion",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "dist-electron/main.js",
   "description": "C.L.A.W Desktop Companion App",
   "scripts": {
@@ -52,6 +52,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "uninstallBeforeInstall": true,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico",
