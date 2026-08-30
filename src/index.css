@@ -433,4 +433,34 @@ input:focus, textarea:focus {
   height: 420px !important;
 }
 
+/* LaTeX Helper Toolbar */
+.latex-toolbar {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 3px 0;
+  margin-bottom: 4px;
+  scrollbar-width: none;
+}
+.latex-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.latex-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 9.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: monospace;
+  transition: all 0.15s ease;
+}
+.latex-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 

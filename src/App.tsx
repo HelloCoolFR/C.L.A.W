@@ -136,6 +136,7 @@ export default function App() {
   const [pingSummary, setPingSummary] = useState('')
   const [devAudioVolume, setDevAudioVolume] = useState(0)
   const avatarWrapperRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Multi-File Notes state
   const [notesList, setNotesList] = useState<NoteFile[]>([
@@ -671,6 +672,54 @@ export default function App() {
     setActiveNoteId(remaining[0].id)
   }
 
+  const insertLatex = (template: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = activeNote.content
+    const before = text.substring(0, start)
+    const after = text.substring(end)
+    
+    let nextContent = before + template + after
+    updateActiveNoteContent(nextContent)
+    
+    setTimeout(() => {
+      textarea.focus()
+      let offset = template.indexOf('{}')
+      if (offset !== -1) {
+        textarea.setSelectionRange(start + offset + 1, start + offset + 1)
+      } else {
+        let blockOffset = template.indexOf('  ')
+        if (blockOffset !== -1) {
+          textarea.setSelectionRange(start + blockOffset + 1, start + blockOffset + 1)
+        } else {
+          textarea.setSelectionRange(start + template.length, start + template.length)
+        }
+      }
+    }, 0)
+  }
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === '$') {
+      e.preventDefault()
+      const textarea = e.currentTarget
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const text = activeNote.content
+      const before = text.substring(0, start)
+      const after = text.substring(end)
+
+      const nextContent = before + '$$' + after
+      updateActiveNoteContent(nextContent)
+
+      setTimeout(() => {
+        textarea.setSelectionRange(start + 1, start + 1)
+      }, 0)
+    }
+  }
+
   const updateChecklistLine = (idx: number, text: string) => {
     const lines = activeNote.content.split('\n')
     lines[idx] = text
@@ -1051,15 +1100,33 @@ export default function App() {
                   dangerouslySetInnerHTML={renderMarkdownAndMath(activeNote.content)}
                 />
               ) : (
-                <textarea
-                  style={{ width: '100%', height: '180px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)', padding: '6px', fontSize: '12px', resize: 'none' }}
-                  placeholder="Write note here (supports Markdown & LaTeX)..."
-                  value={activeNote.content}
-                  onChange={e => {
-                    updateActiveNoteContent(e.target.value)
-                    setCurrentAnim('listening')
-                  }}
-                />
+                <>
+                  <div className="latex-toolbar">
+                    <button className="latex-btn" onClick={() => insertLatex('$$  $$')}>$$ (Block)</button>
+                    <button className="latex-btn" onClick={() => insertLatex('$  $')}>$ (Inline)</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\frac{}{}')}>\frac{}{}</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\sqrt{}')}>\sqrt{}</button>
+                    <button className="latex-btn" onClick={() => insertLatex('^{}')}>{"x^{y}"}</button>
+                    <button className="latex-btn" onClick={() => insertLatex('_{}')}>{"x_{i}"}</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\int_{}^{}')}>\int</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\sum_{}^{}')}>\sum</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\pi ')}>\pi</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\alpha ')}>\alpha</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\beta ')}>\beta</button>
+                    <button className="latex-btn" onClick={() => insertLatex('\\infty ')}>\infty</button>
+                  </div>
+                  <textarea
+                    ref={textareaRef}
+                    onKeyDown={handleTextareaKeyDown}
+                    style={{ width: '100%', height: '180px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)', padding: '6px', fontSize: '12px', resize: 'none' }}
+                    placeholder="Write note here (supports Markdown & LaTeX)..."
+                    value={activeNote.content}
+                    onChange={e => {
+                      updateActiveNoteContent(e.target.value)
+                      setCurrentAnim('listening')
+                    }}
+                  />
+                </>
               )}
             </div>
           )}
