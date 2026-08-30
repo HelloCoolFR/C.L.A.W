@@ -22,5 +22,7 @@ contextBridge.exposeInMainWorld('clawAPI', {
   saveUpdateToken: (token: string) => ipcRenderer.invoke('save-update-token', token),
   onUpdateStatus: (callback: (status: string) => void) => {
     ipcRenderer.on('update-status', (event, status) => callback(status))
-  }
+  },
+  saveNotes: (notesJson: string) => ipcRenderer.invoke('save-notes', notesJson),
+  loadNotes: () => ipcRenderer.invoke('load-notes')
 })

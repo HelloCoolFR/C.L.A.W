@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { marked } from 'marked'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 import Unknown, { type AnimationName } from '../claw-avatar/Unknown'
 
 // Extend global window object with preload APIs
@@ -21,6 +24,8 @@ declare global {
       minimizeToTray: () => void
       saveUpdateToken: (token: string) => Promise<{ success: boolean }>
       onUpdateStatus: (callback: (status: string) => void) => void
+      saveNotes: (notesJson: string) => Promise<{ success: boolean; error?: string }>
+      loadNotes: () => Promise<{ success: boolean; data: string | null; error?: string }>
     }
   }
 }
@@ -90,6 +95,36 @@ async function fetchAICompletion(prompt: string): Promise<string> {
   return '';
 }
 
+function renderMarkdownAndMath(text: string): { __html: string } {
+  if (!text) return { __html: '' }
+  
+  // 1. Block LaTeX: $$ math $$
+  let processed = text.replace(/\$\$\s*([\s\S]+?)\s*\$\$/g, (_, math) => {
+    try {
+      return `<div class="katex-block-math">${katex.renderToString(math, { displayMode: true, throwOnError: false })}</div>`
+    } catch (e) {
+      return `<div style="color:#ff5f56;padding:4px;background:rgba(255,95,86,0.08);border-radius:4px;font-family:monospace;font-size:10px;">$$${math}$$</div>`
+    }
+  })
+
+  // 2. Inline LaTeX: $ math $
+  processed = processed.replace(/(?<!\$)\$\s*([^$\n]+?)\s*\$(?!\$)/g, (_, math) => {
+    try {
+      return katex.renderToString(math, { displayMode: false, throwOnError: false })
+    } catch (e) {
+      return `<span style="color:#ff5f56;background:rgba(255,95,86,0.08);padding:1px 3px;border-radius:3px;font-family:monospace;font-size:10px;">$${math}$</span>`
+    }
+  })
+
+  // 3. Parse Markdown using marked
+  try {
+    const html = marked.parse(processed, { async: false }) as string
+    return { __html: html }
+  } catch (e) {
+    return { __html: processed }
+  }
+}
+
 export default function App() {
   const [currentAnim, setCurrentAnim] = useState<AnimationName>('sleeping')
   const [avatarPlaying, setAvatarPlaying] = useState(true)
@@ -103,15 +138,12 @@ export default function App() {
   const avatarWrapperRef = useRef<HTMLDivElement>(null)
 
   // Multi-File Notes state
-  const [notesList, setNotesList] = useState<NoteFile[]>(() => {
-    const saved = localStorage.getItem('claw_notes_list')
-    return saved ? JSON.parse(saved) : [
-      { id: '1', name: 'Note 1', content: 'Type some thoughts here...', isChecklist: false, checkedLines: {} }
-    ]
-  })
-  const [activeNoteId, setActiveNoteId] = useState<string>(() => {
-    return notesList[0]?.id || '1'
-  })
+  const [notesList, setNotesList] = useState<NoteFile[]>([
+    { id: '1', name: 'Note 1', content: 'Type some thoughts here...', isChecklist: false, checkedLines: {} }
+  ])
+  const [activeNoteId, setActiveNoteId] = useState<string>('1')
+  const [notesLoaded, setNotesLoaded] = useState(false)
+  const [previewMode, setPreviewMode] = useState(false)
   const activeNote = notesList.find(n => n.id === activeNoteId) || notesList[0]
 
   // Clipboard & Files state
@@ -383,10 +415,47 @@ export default function App() {
       }
     }
   }, [])
+  // Load notes from local disk on startup
+  useEffect(() => {
+    const loadDiskNotes = async () => {
+      if (window.clawAPI?.loadNotes) {
+        const res = await window.clawAPI.loadNotes()
+        if (res.success && res.data) {
+          try {
+            const parsed = JSON.parse(res.data)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setNotesList(parsed)
+              setActiveNoteId(parsed[0].id)
+              setNotesLoaded(true)
+              return
+            }
+          } catch (e) {
+            console.error('Error parsing disk notes:', e)
+          }
+        }
+      }
+      const saved = localStorage.getItem('claw_notes_list')
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          setNotesList(parsed)
+          setActiveNoteId(parsed[0]?.id || '1')
+        } catch {}
+      }
+      setNotesLoaded(true)
+    }
+    loadDiskNotes()
+  }, [])
+
   // Save changes
   useEffect(() => {
-    localStorage.setItem('claw_notes_list', JSON.stringify(notesList))
-  }, [notesList])
+    if (notesLoaded) {
+      localStorage.setItem('claw_notes_list', JSON.stringify(notesList))
+      if (window.clawAPI?.saveNotes) {
+        window.clawAPI.saveNotes(JSON.stringify(notesList))
+      }
+    }
+  }, [notesList, notesLoaded])
 
   useEffect(() => {
     localStorage.setItem('claw_dropped_files', JSON.stringify(droppedFiles))
@@ -581,6 +650,65 @@ export default function App() {
     const remaining = notesList.filter(note => note.id !== activeNoteId)
     setNotesList(remaining)
     setActiveNoteId(remaining[0].id)
+  }
+
+  const updateChecklistLine = (idx: number, text: string) => {
+    const lines = activeNote.content.split('\n')
+    lines[idx] = text
+    updateActiveNoteContent(lines.join('\n'))
+  }
+
+  const addChecklistLine = (idx: number) => {
+    const lines = activeNote.content.split('\n')
+    lines.splice(idx + 1, 0, '')
+    // Shift checkedLines down
+    const nextChecks: Record<number, boolean> = {}
+    Object.entries(activeNote.checkedLines).forEach(([k, v]) => {
+      const numKey = Number(k)
+      if (numKey > idx) {
+        nextChecks[numKey + 1] = v
+      } else {
+        nextChecks[numKey] = v
+      }
+    })
+    setNotesList(prev => prev.map(note => {
+      if (note.id === activeNoteId) {
+        return { ...note, content: lines.join('\n'), checkedLines: nextChecks }
+      }
+      return note
+    }))
+  }
+
+  const deleteChecklistLine = (idx: number) => {
+    const lines = activeNote.content.split('\n')
+    if (lines.length <= 1) {
+      // Just clear the line
+      lines[0] = ''
+      setNotesList(prev => prev.map(note => {
+        if (note.id === activeNoteId) {
+          return { ...note, content: '', checkedLines: {} }
+        }
+        return note
+      }))
+      return
+    }
+    lines.splice(idx, 1)
+    // Shift checkedLines up
+    const nextChecks: Record<number, boolean> = {}
+    Object.entries(activeNote.checkedLines).forEach(([k, v]) => {
+      const numKey = Number(k)
+      if (numKey > idx) {
+        nextChecks[numKey - 1] = v
+      } else if (numKey < idx) {
+        nextChecks[numKey] = v
+      }
+    })
+    setNotesList(prev => prev.map(note => {
+      if (note.id === activeNoteId) {
+        return { ...note, content: lines.join('\n'), checkedLines: nextChecks }
+      }
+      return note
+    }))
   }
 
   // Drag and Drop files
@@ -811,7 +939,7 @@ export default function App() {
       {activePanel === 'notes' && activeNote && (
         <div className="overlay-panel notes-panel">
           <div className="panel-header">
-            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
               <select
                 value={activeNoteId}
                 onChange={e => setActiveNoteId(e.target.value)}
@@ -825,61 +953,89 @@ export default function App() {
                 type="text"
                 value={activeNote.name}
                 onChange={e => renameActiveNote(e.target.value)}
-                style={{ width: '62px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', color: 'white', fontSize: '10px', borderRadius: '4px', padding: '2px 4px' }}
+                style={{ width: '56px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', color: 'white', fontSize: '10px', borderRadius: '4px', padding: '2px 4px' }}
                 placeholder="Name"
               />
               <button onClick={createNewNote} style={{ background: 'var(--accent)', border: 'none', color: 'white', borderRadius: '4px', padding: '2px 4px', fontSize: '10px', cursor: 'pointer' }}>+</button>
               <button onClick={deleteActiveNote} style={{ background: 'transparent', border: 'none', color: '#ff5f56', fontSize: '10px', cursor: 'pointer' }}>Del</button>
             </div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button onClick={toggleChecklistMode} style={{ background: activeNote.isChecklist ? 'var(--accent)' : 'rgba(255,255,255,0.05)', border: '1px solid var(--panel-border)', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', cursor: 'pointer' }}>
-                Checklist
+            <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+              {!activeNote.isChecklist && (
+                <button
+                  onClick={() => setPreviewMode(!previewMode)}
+                  style={{ background: previewMode ? 'var(--accent)' : 'rgba(255,255,255,0.05)', border: '1px solid var(--panel-border)', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}
+                >
+                  {previewMode ? 'Edit' : 'Preview'}
+                </button>
+              )}
+              <button onClick={toggleChecklistMode} style={{ background: activeNote.isChecklist ? 'var(--accent)' : 'rgba(255,255,255,0.05)', border: '1px solid var(--panel-border)', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer' }}>
+                List
               </button>
               <button className="close-panel-btn" onClick={() => { setActivePanel(null); setCurrentAnim('idle') }}>✕</button>
             </div>
           </div>
 
           {activeNote.isChecklist ? (
-            <div className="checklist-container" style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto' }}>
+            <div className="checklist-container" style={{ display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto', maxHeight: '180px' }}>
               {(activeNote.content.split('\n') || []).map((line, idx) => {
-                if (!line.trim()) return null
                 return (
-                  <label key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12px', cursor: 'pointer' }}>
+                  <div key={idx} className="checklist-item-row">
                     <input
                       type="checkbox"
                       checked={!!activeNote.checkedLines[idx]}
                       onChange={() => toggleLineCheck(idx)}
-                      style={{ width: 'auto' }}
+                      style={{ width: 'auto', cursor: 'pointer' }}
                     />
-                    <span style={{ textDecoration: activeNote.checkedLines[idx] ? 'line-through' : 'none', color: activeNote.checkedLines[idx] ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
-                      {line}
-                    </span>
-                  </label>
+                    <input
+                      type="text"
+                      value={line}
+                      onChange={e => updateChecklistLine(idx, e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addChecklistLine(idx)
+                        } else if (e.key === 'Backspace' && !line) {
+                          e.preventDefault()
+                          deleteChecklistLine(idx)
+                        }
+                      }}
+                      placeholder="List item..."
+                      className={`checklist-input ${activeNote.checkedLines[idx] ? 'checked' : ''}`}
+                    />
+                    <button className="checklist-del-btn" onClick={() => deleteChecklistLine(idx)}>✕</button>
+                  </div>
                 )
               })}
               <button
                 className="action-btn secondary"
                 style={{ fontSize: '11px', padding: '4px', marginTop: '6px' }}
                 onClick={() => {
-                  const item = prompt('Enter TODO item:')
-                  if (item) {
-                    updateActiveNoteContent(activeNote.content + (activeNote.content ? '\n' : '') + item)
-                  }
+                  const lines = activeNote.content.split('\n')
+                  addChecklistLine(lines.length - 1)
                 }}
               >
                 + Add Item
               </button>
             </div>
           ) : (
-            <textarea
-              style={{ width: '100%', height: '110px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)', padding: '6px', fontSize: '12px', resize: 'none' }}
-              placeholder="Write note here..."
-              value={activeNote.content}
-              onChange={e => {
-                updateActiveNoteContent(e.target.value)
-                setCurrentAnim('listening')
-              }}
-            />
+            <div>
+              {previewMode ? (
+                <div 
+                  className="notes-preview"
+                  dangerouslySetInnerHTML={renderMarkdownAndMath(activeNote.content)}
+                />
+              ) : (
+                <textarea
+                  style={{ width: '100%', height: '180px', background: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--panel-border)', borderRadius: '6px', color: 'var(--text-primary)', padding: '6px', fontSize: '12px', resize: 'none' }}
+                  placeholder="Write note here (supports Markdown & LaTeX)..."
+                  value={activeNote.content}
+                  onChange={e => {
+                    updateActiveNoteContent(e.target.value)
+                    setCurrentAnim('listening')
+                  }}
+                />
+              )}
+            </div>
           )}
         </div>
       )}

@@ -605,3 +605,26 @@ ipcMain.handle('save-update-token', (_event, token: string) => {
   return { success: true }
 })
 
+ipcMain.handle('save-notes', (_event, notesJson: string) => {
+  try {
+    const notesPath = path.join(app.getPath('userData'), 'notes.json')
+    fs.writeFileSync(notesPath, notesJson, 'utf-8')
+    return { success: true }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+})
+
+ipcMain.handle('load-notes', () => {
+  try {
+    const notesPath = path.join(app.getPath('userData'), 'notes.json')
+    if (fs.existsSync(notesPath)) {
+      return { success: true, data: fs.readFileSync(notesPath, 'utf-8') }
+    }
+    return { success: true, data: null }
+  } catch (e: any) {
+    return { success: false, error: e.message }
+  }
+})
+
+
