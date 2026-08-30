@@ -154,22 +154,28 @@ export default function App() {
   })
   
   const [devMode, setDevMode] = useState(false)
+  const [showBorders, setShowBorders] = useState<boolean>(() => {
+    const saved = localStorage.getItem('claw_show_borders')
+    return saved ? JSON.parse(saved) : true
+  })
   const [logs, setLogs] = useState<string[]>(['[System] Dev console active. Ready.'])
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 80))
   }
 
-  // Resize window when dev mode toggles
+  // Resize window when dev mode or active panel toggles
   useEffect(() => {
     if (window.clawAPI?.setWindowSize) {
       if (devMode) {
-        window.clawAPI.setWindowSize(680, 480)
+        window.clawAPI.setWindowSize(720, 580)
+      } else if (activePanel === 'notes') {
+        window.clawAPI.setWindowSize(540, 580)
       } else {
         window.clawAPI.setWindowSize(320, 480)
       }
     }
-  }, [devMode])
+  }, [devMode, activePanel])
   
   const [detectedApp, setDetectedApp] = useState('')
   const [liveComment, setLiveComment] = useState<string | null>(null)
@@ -464,6 +470,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('claw_agenda', JSON.stringify(agenda))
   }, [agenda])
+
+  useEffect(() => {
+    localStorage.setItem('claw_show_borders', JSON.stringify(showBorders))
+  }, [showBorders])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 2) { // Right click to drag
@@ -865,7 +875,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: '0', height: '100vh', overflow: 'hidden' }}>
-      <div className="app-container">
+      <div className={`app-container ${activePanel === 'notes' ? 'large' : ''} ${showBorders ? 'has-border' : ''}`}>
       {/* Radial Menu */}
       <div className={`radial-menu ${menuOpen ? 'open' : ''}`}>
         {wheelOptions.map((opt, i) => {
@@ -1084,6 +1094,10 @@ export default function App() {
           <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '11px', color: 'var(--text-primary)', marginTop: '8px', cursor: 'pointer' }}>
             <input type="checkbox" checked={devMode} onChange={e => setDevMode(e.target.checked)} style={{ width: 'auto' }} />
             <span>Enable Dev Mode</span>
+          </label>
+          <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '11px', color: 'var(--text-primary)', marginTop: '6px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showBorders} onChange={e => setShowBorders(e.target.checked)} style={{ width: 'auto' }} />
+            <span>Show Window Border Glow</span>
           </label>
           {devMode && (
             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', padding: '8px', marginTop: '8px', fontSize: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
