@@ -9,7 +9,7 @@ declare global {
   interface Window {
     clawAPI?: {
       openTaskManager: () => Promise<{ success: boolean; error?: string }>
-      optimizePC: () => Promise<{ success: boolean; error?: string }>
+      runOptimizationTask: (taskId: string) => Promise<{ success: boolean; error?: string }>
       checkUpdates: () => Promise<{ updated: boolean; error?: string }>
       dragWindow: (dx: number, dy: number) => void
       startDrag: (filePath: string) => void
@@ -159,6 +159,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : true
   })
   const [logs, setLogs] = useState<string[]>(['[System] Dev console active. Ready.'])
+  const [completedOpts, setCompletedOpts] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('claw_completed_opts')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [optPanelActive, setOptPanelActive] = useState(false)
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 80))
@@ -474,6 +479,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('claw_show_borders', JSON.stringify(showBorders))
   }, [showBorders])
+
+  useEffect(() => {
+    localStorage.setItem('claw_completed_opts', JSON.stringify(completedOpts))
+  }, [completedOpts])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 2) { // Right click to drag
@@ -802,28 +811,35 @@ export default function App() {
     setAgenda(prev => prev.filter(item => item.id !== id))
   }
 
-  // System optimization actions
-  const runOptimize = async () => {
-    setSysStatus('Optimizing...')
+  // Toggle the optimization task list panel
+  const runOptimize = () => {
+    setOptPanelActive(true)
+    setSysStatus('Select optimization tasks')
+  }
+
+  const runOptTask = async (taskId: string, label: string) => {
+    setSysStatus(`Running ${label}...`)
     setCurrentAnim('working')
-    addLog('Initiating System Optimization...')
-    if (window.clawAPI) {
-      const res = await window.clawAPI.optimizePC()
+    addLog(`Running Optimization: ${label}...`)
+    if (window.clawAPI?.runOptimizationTask) {
+      const res = await window.clawAPI.runOptimizationTask(taskId)
       if (res.success) {
-        setSysStatus('System Optimized!')
-        addLog('Optimization complete: Temp files cleared + DNS flushed.')
+        setCompletedOpts(prev => ({ ...prev, [taskId]: true }))
+        setSysStatus(`${label} Complete!`)
+        addLog(`Optimization Complete: ${label}`)
         setCurrentAnim('happy')
       } else {
         setSysStatus(`Failed: ${res.error}`)
-        addLog(`Optimization failed: ${res.error}`)
+        addLog(`Optimization Failed: ${label} - ${res.error}`)
         setCurrentAnim('confused')
       }
     } else {
       setTimeout(() => {
-        setSysStatus('Optimized (Simulated)')
-        addLog('Optimization complete (Simulated environment).')
+        setCompletedOpts(prev => ({ ...prev, [taskId]: true }))
+        setSysStatus(`${label} Complete! (Simulated)`)
+        addLog(`Optimization Complete: ${label} (Simulated)`)
         setCurrentAnim('happy')
-      }, 1500)
+      }, 1000)
     }
   }
 
@@ -1085,11 +1101,57 @@ export default function App() {
             <button className="close-panel-btn" onClick={() => { setActivePanel(null); setCurrentAnim('idle') }}>✕</button>
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Status: {sysStatus}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <button className="action-btn" onClick={runOptimize}>Optimize Computer</button>
-            <button className="action-btn secondary" onClick={openTaskManager}>Open Task Manager</button>
-            <button className="action-btn secondary" onClick={checkUpdates}>Check for Updates</button>
-          </div>
+          {optPanelActive ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '160px', overflowY: 'auto', paddingRight: '2px' }}>
+              {[
+                { id: 'temp_dns', label: 'Flush Cache & Temp Clean' },
+                { id: 'delivery_opt', label: 'Clean Delivery Cache' },
+                { id: 'dism_cleanup', label: 'Start Component Cleanup' },
+                { id: 'power_plan', label: 'Enable Ultimate Power Plan' },
+                { id: 'registry_tweaks', label: 'Apply Registry Tweaks' },
+                { id: 'telemetry_disable', label: 'Disable Background Telemetry' }
+              ].map(task => {
+                const isDone = !!completedOpts[task.id]
+                return (
+                  <div key={task.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--panel-border)' }}>
+                    <span style={{ fontSize: '10.5px', color: isDone ? 'var(--text-secondary)' : 'var(--text-primary)', textDecoration: isDone ? 'line-through' : 'none' }}>
+                      {task.label}
+                    </span>
+                    <button
+                      onClick={() => runOptTask(task.id, task.label)}
+                      disabled={isDone}
+                      style={{
+                        padding: '3px 8px',
+                        background: isDone ? 'rgba(255,255,255,0.05)' : 'var(--accent)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        color: isDone ? 'var(--text-secondary)' : 'white',
+                        fontSize: '9.5px',
+                        cursor: isDone ? 'default' : 'pointer',
+                        minWidth: '55px',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {isDone ? 'Applied ✓' : 'Apply'}
+                    </button>
+                  </div>
+                )
+              })}
+              <button 
+                className="action-btn secondary" 
+                style={{ fontSize: '10px', padding: '4px', marginTop: '4px' }} 
+                onClick={() => { setOptPanelActive(false); setSysStatus('Idle') }}
+              >
+                ← Back
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button className="action-btn" onClick={runOptimize}>Optimize Computer</button>
+              <button className="action-btn secondary" onClick={openTaskManager}>Open Task Manager</button>
+              <button className="action-btn secondary" onClick={checkUpdates}>Check for Updates</button>
+            </div>
+          )}
 
           <label style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '11px', color: 'var(--text-primary)', marginTop: '8px', cursor: 'pointer' }}>
             <input type="checkbox" checked={devMode} onChange={e => setDevMode(e.target.checked)} style={{ width: 'auto' }} />

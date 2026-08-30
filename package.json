@@ -1,7 +1,7 @@
 {
   "name": "claw-companion",
   "productName": "C.L.A.W Companion",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "dist-electron/main.js",
   "description": "C.L.A.W Desktop Companion App",
   "scripts": {

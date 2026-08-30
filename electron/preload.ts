@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('clawAPI', {
   openTaskManager: () => ipcRenderer.invoke('open-task-manager'),
-  optimizePC: () => ipcRenderer.invoke('optimize-pc'),
+  runOptimizationTask: (taskId: string) => ipcRenderer.invoke('run-optimization-task', taskId),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   dragWindow: (dx: number, dy: number) => ipcRenderer.send('drag-window', { dx, dy }),
   startDrag: (filePath: string) => ipcRenderer.send('start-drag', filePath),

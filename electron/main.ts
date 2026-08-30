@@ -299,17 +299,43 @@ ipcMain.handle('open-task-manager', () => {
   return { success: false, error: 'Unsupported platform' }
 })
 
-ipcMain.handle('optimize-pc', async () => {
+ipcMain.handle('run-optimization-task', async (_event, taskId: string) => {
   return new Promise((resolve) => {
-    if (process.platform === 'win32') {
-      // Clear temp directories and flush DNS
-      exec('ipconfig /flushdns && del /q/f/s %TEMP%\\*', (err) => {
-        if (err) resolve({ success: false, error: err.message })
-        else resolve({ success: true })
-      })
-    } else {
+    if (process.platform !== 'win32') {
       resolve({ success: true, message: 'Simulated optimization' })
+      return
     }
+
+    let command = ''
+    switch (taskId) {
+      case 'temp_dns':
+        command = 'ipconfig /flushdns & del /q /f /s %TEMP%\\* & del /q /f /s C:\\Windows\\Temp\\*'
+        break
+      case 'delivery_opt':
+        command = 'net stop dosvc & del /q /f /s C:\\Windows\\SoftwareDistribution\\DeliveryOptimization\\* & net start dosvc'
+        break
+      case 'dism_cleanup':
+        command = 'dism.exe /Online /Cleanup-Image /StartComponentCleanup'
+        break
+      case 'power_plan':
+        command = 'powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61'
+        break
+      case 'registry_tweaks':
+        command = 'reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects" /v VisualFXSettings /t REG_DWORD /d 2 /f & reg add "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile" /v SystemResponsiveness /t REG_DWORD /d 0 /f'
+        break
+      case 'telemetry_disable':
+        command = 'sc config DiagTrack start=disabled & sc stop DiagTrack & sc config WerSvc start=disabled & sc stop WerSvc'
+        break
+      default:
+        resolve({ success: false, error: 'Unknown optimization task' })
+        return
+    }
+
+    // Run command, if error occurred it might be due to elevation restrictions but we proceed or report
+    exec(command, (err) => {
+      if (err) resolve({ success: false, error: err.message })
+      else resolve({ success: true })
+    })
   })
 })
 
