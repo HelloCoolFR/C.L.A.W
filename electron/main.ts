@@ -1,7 +1,9 @@
-import { app, BrowserWindow, ipcMain, clipboard, screen, desktopCapturer, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, clipboard, screen, desktopCapturer, Tray, Menu, nativeImage, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import * as path from 'path'
 import * as fs from 'fs'
+import * as http from 'http'
+import * as https from 'https'
 import { exec, spawn } from 'child_process'
 
 let mainWindow: BrowserWindow | null = null
@@ -652,5 +654,194 @@ ipcMain.handle('load-notes', () => {
     return { success: false, error: e.message }
   }
 })
+
+// Google Calendar Integration
+const configPath = path.join(app.getPath('userData'), 'config.json')
+
+function getConfig() {
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    } catch {}
+  }
+  return {}
+}
+
+function saveConfig(updated: any) {
+  const current = getConfig()
+  const next = { ...current, ...updated }
+  const userDir = path.dirname(configPath)
+  if (!fs.existsSync(userDir)) {
+    fs.mkdirSync(userDir, { recursive: true })
+  }
+  fs.writeFileSync(configPath, JSON.stringify(next, null, 2), 'utf-8')
+}
+
+let oauthServer: http.Server | null = null
+
+ipcMain.handle('save-google-credentials', (_event, { clientId, clientSecret }) => {
+  saveConfig({ googleClientId: clientId, googleClientSecret: clientSecret })
+  return { success: true }
+})
+
+ipcMain.handle('start-google-auth', async () => {
+  const config = getConfig()
+  const clientId = config.googleClientId
+  const clientSecret = config.googleClientSecret
+
+  if (!clientId || !clientSecret) {
+    return { success: false, error: 'Please set Google Client ID & Client Secret in settings first.' }
+  }
+
+  if (oauthServer) {
+    try { oauthServer.close() } catch {}
+  }
+
+  const port = 49152
+  const redirectUri = `http://localhost:${port}/oauth-callback`
+
+  return new Promise((resolve) => {
+    oauthServer = http.createServer((req, res) => {
+      const urlObj = new URL(req.url || '', `http://${req.headers.host}`)
+      const code = urlObj.searchParams.get('code')
+
+      if (code) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end('<h1>Authentication successful!</h1><p>You can close this tab and return to C.L.A.W.</p>')
+        
+        if (oauthServer) {
+          oauthServer.close()
+          oauthServer = null
+        }
+
+        exchangeAuthCode(code, clientId, clientSecret, redirectUri)
+          .then((tokens) => {
+            saveConfig({
+              googleAccessToken: tokens.access_token,
+              googleRefreshToken: tokens.refresh_token,
+              googleTokenExpiry: Date.now() + (tokens.expires_in * 1000)
+            })
+            resolve({ success: true })
+          })
+          .catch((err) => {
+            resolve({ success: false, error: err.message })
+          })
+      } else {
+        res.writeHead(400, { 'Content-Type': 'text/plain' })
+        res.end('No authorization code found.')
+      }
+    })
+
+    oauthServer.listen(port, () => {
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('https://www.googleapis.com/auth/calendar.readonly')}&access_type=offline&prompt=consent`
+      shell.openExternal(authUrl)
+    })
+  })
+})
+
+function exchangeAuthCode(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const postData = `code=${encodeURIComponent(code)}&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&redirect_uri=${encodeURIComponent(redirectUri)}&grant_type=authorization_code`
+    
+    const req = https.request({
+      hostname: 'oauth2.googleapis.com',
+      path: '/token',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    }, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.error) reject(new Error(parsed.error_description || parsed.error))
+          else resolve(parsed)
+        } catch { reject(new Error('Failed to parse token response')) }
+      })
+    })
+
+    req.on('error', reject)
+    req.write(postData)
+    req.end()
+  })
+}
+
+async function getOrRefreshAccessToken(): Promise<string | null> {
+  const config = getConfig()
+  if (!config.googleRefreshToken) return null
+
+  if (config.googleAccessToken && config.googleTokenExpiry && (config.googleTokenExpiry - Date.now() > 30000)) {
+    return config.googleAccessToken
+  }
+
+  return new Promise((resolve) => {
+    const postData = `client_id=${encodeURIComponent(config.googleClientId)}&client_secret=${encodeURIComponent(config.googleClientSecret)}&refresh_token=${encodeURIComponent(config.googleRefreshToken)}&grant_type=refresh_token`
+    
+    const req = https.request({
+      hostname: 'oauth2.googleapis.com',
+      path: '/token',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    }, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.access_token) {
+            saveConfig({
+              googleAccessToken: parsed.access_token,
+              googleTokenExpiry: Date.now() + (parsed.expires_in * 1000)
+            })
+            resolve(parsed.access_token)
+          } else resolve(null)
+        } catch { resolve(null) }
+      })
+    })
+
+    req.on('error', () => resolve(null))
+    req.write(postData)
+    req.end()
+  })
+}
+
+ipcMain.handle('fetch-google-events', async () => {
+  const accessToken = await getOrRefreshAccessToken()
+  if (!accessToken) return { success: false, error: 'Not authenticated or failed to refresh token.' }
+
+  return new Promise((resolve) => {
+    const timeMin = new Date().toISOString()
+    const url = `/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&maxResults=10&orderBy=startTime&singleEvents=true`
+    
+    const req = https.request({
+      hostname: 'www.googleapis.com',
+      path: url,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    }, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed.error) resolve({ success: false, error: parsed.error.message })
+          else resolve({ success: true, events: parsed.items || [] })
+        } catch { resolve({ success: false, error: 'Failed to parse calendar events response.' }) }
+      })
+    })
+
+    req.on('error', (err) => resolve({ success: false, error: err.message }))
+    req.end()
+  })
+})
+
 
 

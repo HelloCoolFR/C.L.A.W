@@ -24,5 +24,8 @@ contextBridge.exposeInMainWorld('clawAPI', {
     ipcRenderer.on('update-status', (event, status) => callback(status))
   },
   saveNotes: (notesJson: string) => ipcRenderer.invoke('save-notes', notesJson),
-  loadNotes: () => ipcRenderer.invoke('load-notes')
+  loadNotes: () => ipcRenderer.invoke('load-notes'),
+  saveGoogleCredentials: (clientId: string, clientSecret: string) => ipcRenderer.invoke('save-google-credentials', { clientId, clientSecret }),
+  startGoogleAuth: () => ipcRenderer.invoke('start-google-auth'),
+  fetchGoogleEvents: () => ipcRenderer.invoke('fetch-google-events')
 })

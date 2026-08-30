@@ -26,6 +26,9 @@ declare global {
       onUpdateStatus: (callback: (status: string) => void) => void
       saveNotes: (notesJson: string) => Promise<{ success: boolean; error?: string }>
       loadNotes: () => Promise<{ success: boolean; data: string | null; error?: string }>
+      saveGoogleCredentials: (clientId: string, clientSecret: string) => Promise<{ success: boolean; error?: string }>
+      startGoogleAuth: () => Promise<{ success: boolean; error?: string }>
+      fetchGoogleEvents: () => Promise<{ success: boolean; events?: any[]; error?: string }>
     }
   }
 }
@@ -165,6 +168,8 @@ export default function App() {
     return saved ? JSON.parse(saved) : {}
   })
   const [optPanelActive, setOptPanelActive] = useState(false)
+  const [gClientId, setGClientId] = useState(() => localStorage.getItem('claw_g_client_id') || '')
+  const [gClientSecret, setGClientSecret] = useState(() => localStorage.getItem('claw_g_client_secret') || '')
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 80))
@@ -860,6 +865,69 @@ export default function App() {
     setAgenda(prev => prev.filter(item => item.id !== id))
   }
 
+  const syncGoogleCalendarEvents = async () => {
+    if (!window.clawAPI?.fetchGoogleEvents) return
+    setSysStatus('Syncing Google Calendar...')
+    const res = await window.clawAPI.fetchGoogleEvents()
+    if (res.success && res.events) {
+      const mapped: AgendaItem[] = res.events.map((evt: any) => {
+        let timeStr = 'All Day'
+        if (evt.start?.dateTime) {
+          const dateObj = new Date(evt.start.dateTime)
+          timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+        return {
+          id: evt.id,
+          title: evt.summary || 'Untitled Event',
+          time: timeStr
+        }
+      })
+      setAgenda(mapped.sort((a, b) => a.time.localeCompare(b.time)))
+      setSysStatus('Google Calendar Synced')
+      addLog(`Synced ${mapped.length} event(s) from Google Calendar.`)
+    } else {
+      setSysStatus(`Sync failed: ${res.error || 'Unknown error'}`)
+      addLog(`Google Calendar Sync Failed: ${res.error}`)
+    }
+  }
+
+  const connectGoogleCalendar = async () => {
+    if (!window.clawAPI?.startGoogleAuth || !window.clawAPI?.saveGoogleCredentials) return
+    if (!gClientId || !gClientSecret) {
+      setSysStatus('Error: Credentials missing')
+      addLog('Google Calendar Error: Client ID or Secret is empty.')
+      alert('Please fill in both Google Client ID and Client Secret in the settings below first.')
+      return
+    }
+
+    await window.clawAPI.saveGoogleCredentials(gClientId, gClientSecret)
+    localStorage.setItem('claw_g_client_id', gClientId)
+    localStorage.setItem('claw_g_client_secret', gClientSecret)
+
+    setSysStatus('Connecting Google...')
+    const res = await window.clawAPI.startGoogleAuth()
+    if (res.success) {
+      setSysStatus('Connected!')
+      addLog('Google Calendar connected successfully.')
+      syncGoogleCalendarEvents()
+    } else {
+      setSysStatus(`Auth error: ${res.error}`)
+      addLog(`Google Calendar connection failed: ${res.error}`)
+    }
+  }
+
+  useEffect(() => {
+    const initSync = async () => {
+      const hasCreds = localStorage.getItem('claw_g_client_id') && localStorage.getItem('claw_g_client_secret')
+      if (hasCreds) {
+        setTimeout(() => {
+          syncGoogleCalendarEvents()
+        }, 3000)
+      }
+    }
+    initSync()
+  }, [])
+
   // Toggle the optimization task list panel
   const runOptimize = () => {
     setOptPanelActive(true)
@@ -1007,7 +1075,10 @@ export default function App() {
             <input type="text" placeholder="12:00" value={newTime} onChange={e => { setNewTime(e.target.value); setCurrentAnim('thinking') }} style={{ width: '48px' }} />
             <button type="submit" style={{ padding: '4px 8px', background: 'var(--accent)', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}>+</button>
           </form>
-          <button className="action-btn secondary" style={{ fontSize: '11px', padding: '5px' }} onClick={() => alert('Connect Google Calendar API client in settings.')}>Connect Google Agenda</button>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button className="action-btn secondary" style={{ fontSize: '11px', padding: '5px', flex: 1 }} onClick={connectGoogleCalendar}>Connect Google Agenda</button>
+            <button className="action-btn secondary" style={{ fontSize: '11px', padding: '5px', width: '30px' }} onClick={syncGoogleCalendarEvents} title="Sync Events">🔄</button>
+          </div>
         </div>
       )}
 
@@ -1228,6 +1299,24 @@ export default function App() {
             <input type="checkbox" checked={showBorders} onChange={e => setShowBorders(e.target.checked)} style={{ width: 'auto' }} />
             <span>Show Window Border Glow</span>
           </label>
+          
+          <div style={{ marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Google Calendar Setup</span>
+            <input
+              type="text"
+              placeholder="Google Client ID"
+              value={gClientId}
+              onChange={e => setGClientId(e.target.value)}
+              style={{ fontSize: '9.5px', height: '22px', padding: '2px 4px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '4px', color: 'white' }}
+            />
+            <input
+              type="password"
+              placeholder="Google Client Secret"
+              value={gClientSecret}
+              onChange={e => setGClientSecret(e.target.value)}
+              style={{ fontSize: '9.5px', height: '22px', padding: '2px 4px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '4px', color: 'white' }}
+            />
+          </div>
           {devMode && (
             <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--panel-border)', borderRadius: '6px', padding: '8px', marginTop: '8px', fontSize: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--accent)', fontWeight: 600 }}>Detected App:</span> {detectedApp || 'None'}</div>
